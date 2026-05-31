@@ -70,10 +70,33 @@ export default function App() {
     <div className="app-shell">
       <a href="#main" className="skip-link">Skip to planner</a>
       <header className="topbar">
-        <div>
+        <div className="hero-copy">
           <p>India travel planner</p>
           <h1>TripMind</h1>
           <span>Plan practical, train-first India trips from real constraints.</span>
+        </div>
+        <div className="hero-visual" aria-hidden="true">
+          <div className="india-orbit">
+            <svg className="india-map" viewBox="0 0 220 260" role="img">
+              <path d="M100 10c23 10 37 24 43 43l22 4 5 25-17 18 12 21-18 17 5 29-22 20-8 38-21 24-20-26 1-37-18-14 11-24-25-15 17-24-16-23 22-11-2-29 22-11 7-45Z" />
+              <path className="route-line" d="M90 58 C122 82 131 109 113 137 C96 163 103 190 128 215" />
+            </svg>
+            <span className="route-dot dot-north" />
+            <span className="route-dot dot-west" />
+            <span className="route-dot dot-south" />
+          </div>
+          <div className="floating-ticket ticket-one">
+            <strong>Delhi</strong>
+            <span>06:10 train</span>
+          </div>
+          <div className="floating-ticket ticket-two">
+            <strong>Jaipur</strong>
+            <span>Fort + food</span>
+          </div>
+          <div className="floating-ticket ticket-three">
+            <strong>Kochi</strong>
+            <span>Slow day</span>
+          </div>
         </div>
       </header>
 
