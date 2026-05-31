@@ -1,9 +1,9 @@
-import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, fallbackItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared.js";
+import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, fallbackItinerary, requestId, SYSTEM_PROMPT, edgeConfig, nodeRequest, sendNodeResponse } from "./_shared.js";
 
 export const config = edgeConfig;
 
 /** Handles guest-first itinerary generation with saved-trip caching for signed-in users. */
-export default async function handler(req: Request): Promise<Response> {
+async function handlePlan(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
@@ -62,4 +62,8 @@ Return JSON with keys: destination, total_cost_inr, scores, constraints, festiva
     const message = error instanceof Error ? error.message : "Unable to plan trip";
     return json({ request_id: id, error: message }, 500, { "X-Request-Id": id });
   }
+}
+
+export default async function handler(req: any, res: any): Promise<void> {
+  await sendNodeResponse(res, await handlePlan(nodeRequest(req)));
 }

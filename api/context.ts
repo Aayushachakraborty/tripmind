@@ -1,9 +1,9 @@
-import { json, getUser, checkRateLimit, parsePreferences, requestId, edgeConfig } from "./_shared.js";
+import { json, getUser, checkRateLimit, parsePreferences, requestId, edgeConfig, nodeRequest, sendNodeResponse } from "./_shared.js";
 
 export const config = edgeConfig;
 
 /** Handles authenticated preference persistence for future trip context. */
-export default async function handler(req: Request): Promise<Response> {
+async function handleContext(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
@@ -24,4 +24,8 @@ export default async function handler(req: Request): Promise<Response> {
     const message = error instanceof Error ? error.message : "Unable to save context";
     return json({ request_id: id, error: message }, 500, { "X-Request-Id": id });
   }
+}
+
+export default async function handler(req: any, res: any): Promise<void> {
+  await sendNodeResponse(res, await handleContext(nodeRequest(req)));
 }

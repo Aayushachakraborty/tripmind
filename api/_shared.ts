@@ -23,6 +23,23 @@ export function json(data: unknown, status = 200, extraHeaders: Record<string, s
   });
 }
 
+/** Converts a Vercel Node request into the Web Request shape used by shared handlers. */
+export function nodeRequest(req: any): Request {
+  const method = req.method ?? "GET";
+  const body = method === "GET" || method === "HEAD" ? undefined : JSON.stringify(req.body ?? {});
+  return new Request(`https://tripmind.local${req.url ?? "/"}`, {
+    method,
+    headers: req.headers,
+    body
+  });
+}
+
+/** Sends a Web Response through a Vercel Node response object. */
+export async function sendNodeResponse(res: any, response: Response): Promise<void> {
+  response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.status(response.status).send(await response.text());
+}
+
 /** Reads a required server environment variable or throws a clear error. */
 export function requireEnv(name: string): string {
   const value = process.env[name];

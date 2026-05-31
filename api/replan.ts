@@ -1,10 +1,10 @@
 import { ItinerarySchema } from "../src/lib/schemas.js";
-import { json, getUser, checkRateLimit, parseSignal, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared.js";
+import { json, getUser, checkRateLimit, parseSignal, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig, nodeRequest, sendNodeResponse } from "./_shared.js";
 
 export const config = edgeConfig;
 
 /** Handles authenticated itinerary patching after realtime disruption signals. */
-export default async function handler(req: Request): Promise<Response> {
+async function handleReplan(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
@@ -50,4 +50,8 @@ Return the full updated itinerary JSON with the same schema.`;
     const message = error instanceof Error ? error.message : "Unable to replan trip";
     return json({ request_id: id, error: message }, 500, { "X-Request-Id": id });
   }
+}
+
+export default async function handler(req: any, res: any): Promise<void> {
+  await sendNodeResponse(res, await handleReplan(nodeRequest(req)));
 }
