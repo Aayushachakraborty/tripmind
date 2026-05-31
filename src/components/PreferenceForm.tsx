@@ -1,4 +1,4 @@
-import { FormEvent, memo, useEffect, useMemo, useState } from "react";
+import { FormEvent, memo, useCallback, useEffect, useMemo, useState } from "react";
 import { BUDGET_PRESETS, DIETARY_OPTIONS, INDIAN_CITIES, INTEREST_OPTIONS, PACE_OPTIONS } from "../constants";
 import type { PreferencesInput } from "../lib/schemas";
 import { formatINR } from "../utils/formatters";
@@ -13,6 +13,7 @@ type Props = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+/** Renders the trip preferences form with debounced destination selection. */
 function PreferenceFormComponent({ disabled = false, disabledReason = "", loading, onSubmit }: Props) {
   const [destinationDraft, setDestinationDraft] = useState("Jaipur");
   const [destination, setDestination] = useState("Jaipur");
@@ -32,18 +33,18 @@ function PreferenceFormComponent({ disabled = false, disabledReason = "", loadin
     return () => window.clearTimeout(timer);
   }, [destinationDraft]);
 
-  function toggleDiet(id: PreferencesInput["dietary"][number]) {
+  const toggleDiet = useCallback((id: PreferencesInput["dietary"][number]) => {
     setDietary((current) => {
       const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
       return id === "jain" && !next.includes("veg") ? [...next, "veg"] : next;
     });
-  }
+  }, []);
 
-  function toggleInterest(value: string) {
+  const toggleInterest = useCallback((value: string) => {
     setInterests((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
-  }
+  }, []);
 
-  async function submit(event: FormEvent) {
+  const submit = useCallback(async (event: FormEvent) => {
     event.preventDefault();
     if (disabled) return;
     const safeDestination = sanitiseInput(destinationDraft || destination);
@@ -63,7 +64,7 @@ function PreferenceFormComponent({ disabled = false, disabledReason = "", loadin
     } catch {
       // The parent hook renders the user-facing error state.
     }
-  }
+  }, [accessibilityNeeds, budgetPreset, destination, destinationDraft, dietary, disabled, endDate, groupType, interests, onSubmit, pace, startDate, transport]);
 
   return (
     <form className="planner-form" onSubmit={submit} aria-busy={loading}>

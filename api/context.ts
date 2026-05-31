@@ -2,13 +2,14 @@ import { json, getUser, checkRateLimit, parsePreferences, requestId, edgeConfig 
 
 export const config = edgeConfig;
 
+/** Handles authenticated preference persistence for future trip context. */
 export default async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const id = requestId();
   try {
     const { supabase, user } = await getUser(req);
+    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, { "X-Request-Id": id });
     await checkRateLimit(user.id, "context");
     const preferences = parsePreferences(await req.json());
     const { error } = await supabase.from("preferences").upsert({

@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { Itinerary } from "../lib/schemas";
 import { formatINR, formatTrainClass } from "../utils/formatters";
 
+/** Displays the recommended train-first route for an itinerary. */
 function TrainCardComponent({ train }: { train: Itinerary["train"] }) {
   return (
     <article className="train-card">

@@ -10,6 +10,7 @@ const labels: Record<keyof Itinerary["scores"], string> = {
   pace: "Pace"
 };
 
+/** Displays expandable score bars for itinerary fit metrics. */
 function ScoreDashboardComponent({ scores }: { scores: Itinerary["scores"] }) {
   const [active, setActive] = useState<string>("");
 

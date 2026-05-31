@@ -2,13 +2,14 @@ import { json, getUser, checkRateLimit, sha256, parsePreferences, askGeminiForIt
 
 export const config = edgeConfig;
 
+/** Handles authenticated itinerary generation and cache lookup requests. */
 export default async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const id = requestId();
   try {
     const { supabase, user } = await getUser(req);
+    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, { "X-Request-Id": id });
     await checkRateLimit(user.id, "plan");
     const body = await req.json();
     const preferences = parsePreferences(body);

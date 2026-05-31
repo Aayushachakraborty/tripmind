@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Component, type ErrorInfo, lazy, type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { PreferenceForm } from "./components/PreferenceForm";
 import { RealtimeAlert } from "./components/RealtimeAlert";
@@ -11,6 +11,40 @@ import type { PreferencesInput } from "./lib/schemas";
 
 const ItineraryView = lazy(() => import("./components/ItineraryView"));
 
+type ErrorBoundaryProps = { children: ReactNode };
+type ErrorBoundaryState = { error: Error | null };
+
+/** Catches render-time failures so the app shows a recoverable message instead of a blank page. */
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { error: null };
+
+  /** Stores the thrown render error in component state. */
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
+  }
+
+  /** Logs render failures for browser diagnostics. */
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("TripMind render error", error, info);
+  }
+
+  /** Renders either the app or the fallback error panel. */
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="app-shell error-shell" role="alert">
+          <section className="panel visible">
+            <h1>TripMind</h1>
+            <p>Something went wrong while rendering. Refresh the page and try again.</p>
+          </section>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** Renders the TripMind single-page app shell and wires auth, alerts, cache, and planning. */
 export default function App() {
   const [email, setEmail] = useState("");
   const [authMessage, setAuthMessage] = useState("");
@@ -19,6 +53,8 @@ export default function App() {
   const planner = useTripPlanner();
   const cache = useOfflineCache();
   const realtime = useRealtimeChannel(planner.tripId);
+  const { cachedItinerary, isFromCache, save } = cache;
+  const { itinerary, setItinerary } = planner;
 
   useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
@@ -28,14 +64,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!planner.itinerary && cache.cachedItinerary) planner.setItinerary(cache.cachedItinerary);
-  }, [cache.cachedItinerary, planner]);
+    if (!itinerary && cachedItinerary) setItinerary(cachedItinerary);
+  }, [cachedItinerary, itinerary, setItinerary]);
 
   useEffect(() => {
-    if (planner.itinerary) cache.save(planner.itinerary);
-  }, [planner.itinerary, cache]);
+    if (itinerary) save(itinerary);
+  }, [itinerary, save]);
 
-  async function signIn() {
+  const signIn = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setAuthMessage("Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local to enable sign-in.");
       return;
@@ -45,9 +81,9 @@ export default function App() {
       options: { emailRedirectTo: window.location.origin }
     });
     setAuthMessage(error ? error.message : "Magic link sent. Check your inbox.");
-  }
+  }, [email]);
 
-  async function submitPreferences(preferences: PreferencesInput) {
+  const submitPreferences = useCallback(async (preferences: PreferencesInput) => {
     if (!session) {
       setAuthMessage("Sign in with magic link before planning your trip.");
       return;
@@ -63,9 +99,10 @@ export default function App() {
     });
     if (response.trip_id) planner.setTripId(response.trip_id);
     setTab("Trips");
-  }
+  }, [planner, session]);
 
   return (
+    <ErrorBoundary>
     <div className="app-shell">
       <a href="#main" className="skip-link">Skip to planner</a>
       <header className="topbar">
@@ -81,7 +118,8 @@ export default function App() {
             </>
           ) : (
             <>
-              <input type="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} aria-label="Email" />
+              <label className="sr-only" htmlFor="email">Email</label>
+              <input id="email" type="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />
               <button type="button" onClick={signIn} disabled={!email && isSupabaseConfigured}>Magic link</button>
             </>
           )}
@@ -105,7 +143,7 @@ export default function App() {
           {planner.loading ? <SkeletonLoader /> : null}
           {planner.itinerary ? (
             <Suspense fallback={<SkeletonLoader />}>
-              <ItineraryView itinerary={planner.itinerary} isFromCache={cache.isFromCache} />
+              <ItineraryView itinerary={planner.itinerary} isFromCache={isFromCache} />
             </Suspense>
           ) : (
             <div className="empty-state">
@@ -151,5 +189,6 @@ export default function App() {
         <span>TripMind plans with Supabase realtime and Gemini reasoning.</span>
       </footer>
     </div>
+    </ErrorBoundary>
   );
 }

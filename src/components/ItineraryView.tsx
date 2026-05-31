@@ -1,19 +1,25 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Itinerary } from "../lib/schemas";
 import { formatDate, formatINR } from "../utils/formatters";
 import { ActivityCard } from "./ActivityCard";
 import { ScoreDashboard } from "./ScoreDashboard";
 import { TrainCard } from "./TrainCard";
 
+/** Renders the full itinerary timeline, warnings, scores, and train recommendation. */
 function ItineraryViewComponent({ itinerary, isFromCache }: { itinerary: Itinerary; isFromCache: boolean }) {
   const [warnings, setWarnings] = useState(itinerary.warnings);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, [itinerary]);
 
   return (
     <section className="itinerary-view" aria-labelledby="itinerary-title">
       <header className="itinerary-header">
         <div>
           <p>{itinerary.destination}</p>
-          <h2 id="itinerary-title">{formatINR(itinerary.total_cost_inr)} estimated total</h2>
+          <h2 id="itinerary-title" ref={titleRef} tabIndex={-1}>{formatINR(itinerary.total_cost_inr)} estimated total</h2>
         </div>
         <div className="header-actions">
           {isFromCache ? <span className="offline-badge">Offline cache</span> : null}
@@ -34,7 +40,7 @@ function ItineraryViewComponent({ itinerary, isFromCache }: { itinerary: Itinera
       </div>
 
       {warnings.map((warning) => (
-        <div className="warning-alert" key={warning}>
+        <div className="warning-alert" key={warning} role="alert" aria-live="polite">
           <span>{warning}</span>
           <button type="button" onClick={() => setWarnings((items) => items.filter((item) => item !== warning))}>Dismiss</button>
         </div>

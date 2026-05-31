@@ -8,10 +8,12 @@ type Props = {
   onReplan: (signal: RealtimeSignal) => Promise<{ before: Itinerary; after: Itinerary }>;
 };
 
+/** Shows a realtime disruption alert with optional AI replanning diff. */
 function RealtimeAlertComponent({ signal, onDismiss, onReplan }: Props) {
   const [diff, setDiff] = useState<{ before: Itinerary; after: Itinerary } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  /** Requests an itinerary replan for the current realtime signal. */
   async function runReplan() {
     setLoading(true);
     try {

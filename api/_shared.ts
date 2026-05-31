@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 import { ItinerarySchema, PreferencesInputSchema, RealtimeSignalSchema } from "../src/lib/schemas";
 import type { Itinerary, PreferencesInput, RealtimeSignal } from "../src/lib/schemas";
+import { sanitiseUnknown } from "../src/utils/validators";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -14,6 +15,7 @@ const jsonHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
+/** Serialises API data as JSON with standard CORS headers. */
 export function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -21,18 +23,21 @@ export function json(data: unknown, status = 200, extraHeaders: Record<string, s
   });
 }
 
+/** Reads a required server environment variable or throws a clear error. */
 export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing ${name}`);
   return value;
 }
 
+/** Creates a Supabase service-role client for trusted serverless work. */
 export function adminClient() {
   return createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_KEY"), {
     auth: { persistSession: false }
   });
 }
 
+/** Verifies the bearer JWT and returns the authenticated Supabase user. */
 export async function getUser(req: Request) {
   const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) throw new Response(JSON.stringify({ error: "Missing bearer token" }), { status: 401, headers: jsonHeaders });
@@ -44,6 +49,7 @@ export async function getUser(req: Request) {
   return { supabase, user: data.user };
 }
 
+/** Enforces a fixed-window per-user endpoint rate limit. */
 export async function checkRateLimit(userId: string, endpoint: string): Promise<void> {
   const supabase = adminClient();
   const now = new Date();
@@ -79,6 +85,7 @@ export async function checkRateLimit(userId: string, endpoint: string): Promise<
     .eq("endpoint", endpoint);
 }
 
+/** Produces a SHA-256 hash for cacheable request payloads. */
 export async function sha256(input: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(input));
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -87,23 +94,28 @@ export async function sha256(input: unknown): Promise<string> {
     .join("");
 }
 
+/** Generates a request id for logs, responses, and client diagnostics. */
 export function requestId(): string {
   return crypto.randomUUID();
 }
 
+/** Parses and sanitises trip preference input for API use. */
 export function parsePreferences(input: unknown): PreferencesInput {
-  return PreferencesInputSchema.parse(input);
+  return PreferencesInputSchema.parse(sanitiseUnknown(input));
 }
 
+/** Parses and sanitises realtime signal input for API use. */
 export function parseSignal(input: unknown): RealtimeSignal {
-  return RealtimeSignalSchema.parse(input);
+  return RealtimeSignalSchema.parse(sanitiseUnknown(input));
 }
 
+/** Extracts raw JSON from Gemini text responses. */
 function extractJson(text: string): unknown {
   const clean = text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
   return JSON.parse(clean);
 }
 
+/** Calls Gemini and validates the resulting itinerary against the shared schema. */
 export async function askGeminiForItinerary(prompt: string, timeoutMs = 15_000): Promise<Itinerary> {
   const genAI = new GoogleGenerativeAI(requireEnv("GEMINI_API_KEY"));
   const model = genAI.getGenerativeModel({

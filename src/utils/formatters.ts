@@ -1,3 +1,4 @@
+/** Formats a number as Indian rupees without decimal places. */
 export function formatINR(value: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -6,6 +7,7 @@ export function formatINR(value: number): string {
   }).format(value);
 }
 
+/** Formats an ISO date string for Indian English readers. */
 export function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
@@ -14,6 +16,7 @@ export function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+/** Formats minutes as a compact hours/minutes duration string. */
 export function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -22,6 +25,7 @@ export function formatDuration(minutes: number): string {
   return `${hours} hr ${mins} min`;
 }
 
+/** Expands common Indian Railways class codes into readable labels. */
 export function formatTrainClass(value: string): string {
   const map: Record<string, string> = {
     SL: "Sleeper",

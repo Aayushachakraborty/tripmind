@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import type { Itinerary } from "../lib/schemas";
 
+/** Compares the first changed activities before and after a replan. */
 function DiffViewComponent({ before, after }: { before: Itinerary; after: Itinerary }) {
   const oldActivities = useMemo(() => before.days.flatMap((day) => day.activities).slice(0, 4), [before]);
   const newActivities = useMemo(() => after.days.flatMap((day) => day.activities).slice(0, 4), [after]);

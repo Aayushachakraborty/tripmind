@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { RealtimeSignalSchema, type RealtimeSignal } from "../lib/schemas";
 
+/** Subscribes to Supabase realtime trip alerts and exposes dismissible signals. */
 export function useRealtimeChannel(tripId: string) {
   const [signals, setSignals] = useState<RealtimeSignal[]>([]);
 

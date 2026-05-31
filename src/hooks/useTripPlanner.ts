@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ItinerarySchema, TripResponseSchema, type Itinerary, type PreferencesInput, type RealtimeSignal } from "../lib/schemas";
 
+/** Returns authenticated JSON headers for serverless trip-planning requests. */
 async function authHeaders(): Promise<HeadersInit> {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase env is missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.");
@@ -15,6 +16,7 @@ async function authHeaders(): Promise<HeadersInit> {
   };
 }
 
+/** Manages TripMind plan and replan API calls plus itinerary request state. */
 export function useTripPlanner() {
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [tripId, setTripId] = useState<string>("");

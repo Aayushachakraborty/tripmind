@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import type { Activity } from "../lib/schemas";
 import { formatDuration, formatINR } from "../utils/formatters";
 
+/** Displays a single itinerary activity with cost, dietary, and backup details. */
 function ActivityCardComponent({ activity }: { activity: Activity }) {
   const [open, setOpen] = useState(false);
 
