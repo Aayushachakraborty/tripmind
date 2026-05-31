@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
-import { ItinerarySchema, PreferencesInputSchema, RealtimeSignalSchema } from "../src/lib/schemas";
-import type { Itinerary, PreferencesInput, RealtimeSignal } from "../src/lib/schemas";
-import { sanitiseUnknown } from "../src/utils/validators";
+import { ItinerarySchema, PreferencesInputSchema, RealtimeSignalSchema } from "../src/lib/schemas.js";
+import type { Itinerary, PreferencesInput, RealtimeSignal } from "../src/lib/schemas.js";
+import { sanitiseUnknown } from "../src/utils/validators.js";
 
 declare const process: { env: Record<string, string | undefined> };
 

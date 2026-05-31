@@ -1,4 +1,4 @@
-import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared";
+import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared.js";
 
 export const config = edgeConfig;
 

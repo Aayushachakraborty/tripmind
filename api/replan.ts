@@ -1,5 +1,5 @@
-import { ItinerarySchema } from "../src/lib/schemas";
-import { json, getUser, checkRateLimit, parseSignal, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared";
+import { ItinerarySchema } from "../src/lib/schemas.js";
+import { json, getUser, checkRateLimit, parseSignal, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared.js";
 
 export const config = edgeConfig;
 

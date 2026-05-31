@@ -1,4 +1,4 @@
-import { json, getUser, checkRateLimit, parsePreferences, requestId, edgeConfig } from "./_shared";
+import { json, getUser, checkRateLimit, parsePreferences, requestId, edgeConfig } from "./_shared.js";
 
 export const config = edgeConfig;
 
