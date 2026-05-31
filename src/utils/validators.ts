@@ -1,4 +1,4 @@
-import { PreferencesInputSchema, type PreferencesInput } from "../lib/schemas";
+import { PreferencesInputSchema, type PreferencesInput } from "../lib/schemas.js";
 
 /** Removes script tags, HTML tags, and javascript URLs from user-entered text. */
 export function sanitiseInput(value: string): string {
