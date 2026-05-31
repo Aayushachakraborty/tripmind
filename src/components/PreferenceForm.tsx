@@ -5,8 +5,6 @@ import { formatINR } from "../utils/formatters";
 import { sanitiseInput } from "../utils/validators";
 
 type Props = {
-  disabled?: boolean;
-  disabledReason?: string;
   loading: boolean;
   onSubmit: (preferences: PreferencesInput) => Promise<void>;
 };
@@ -14,7 +12,7 @@ type Props = {
 const today = new Date().toISOString().slice(0, 10);
 
 /** Renders the trip preferences form with debounced destination selection. */
-function PreferenceFormComponent({ disabled = false, disabledReason = "", loading, onSubmit }: Props) {
+function PreferenceFormComponent({ loading, onSubmit }: Props) {
   const [destinationDraft, setDestinationDraft] = useState("Jaipur");
   const [destination, setDestination] = useState("Jaipur");
   const [startDate, setStartDate] = useState(today);
@@ -46,7 +44,6 @@ function PreferenceFormComponent({ disabled = false, disabledReason = "", loadin
 
   const submit = useCallback(async (event: FormEvent) => {
     event.preventDefault();
-    if (disabled) return;
     const safeDestination = sanitiseInput(destinationDraft || destination);
     try {
       await onSubmit({
@@ -64,7 +61,7 @@ function PreferenceFormComponent({ disabled = false, disabledReason = "", loadin
     } catch {
       // The parent hook renders the user-facing error state.
     }
-  }, [accessibilityNeeds, budgetPreset, destination, destinationDraft, dietary, disabled, endDate, groupType, interests, onSubmit, pace, startDate, transport]);
+  }, [accessibilityNeeds, budgetPreset, destination, destinationDraft, dietary, endDate, groupType, interests, onSubmit, pace, startDate, transport]);
 
   return (
     <form className="planner-form" onSubmit={submit} aria-busy={loading}>
@@ -175,8 +172,7 @@ function PreferenceFormComponent({ disabled = false, disabledReason = "", loadin
         </div>
       </div>
 
-      {disabledReason ? <p className="form-note">{disabledReason}</p> : null}
-      <button className="primary-action" type="submit" disabled={disabled || loading || interests.length === 0} aria-busy={loading}>
+      <button className="primary-action" type="submit" disabled={loading || interests.length === 0} aria-busy={loading}>
         {loading ? "Planning..." : "Plan my trip"}
       </button>
     </form>
