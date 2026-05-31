@@ -48,6 +48,10 @@ export default function App() {
   }
 
   async function submitPreferences(preferences: PreferencesInput) {
+    if (!session) {
+      setAuthMessage("Sign in with magic link before planning your trip.");
+      return;
+    }
     const response = await planner.plan(preferences);
     await fetch("/api/context", {
       method: "POST",
@@ -87,7 +91,12 @@ export default function App() {
 
       <main id="main" className="main-grid">
         <section className={tab === "Plan" ? "panel visible" : "panel"}>
-          <PreferenceForm loading={planner.loading} onSubmit={submitPreferences} />
+          <PreferenceForm
+            disabled={!session}
+            disabledReason={!session ? "Sign in with magic link to generate and save your itinerary." : ""}
+            loading={planner.loading}
+            onSubmit={submitPreferences}
+          />
           {planner.error ? <p className="error-text">{planner.error}</p> : null}
           {planner.requestId ? <p className="request-id">Request {planner.requestId}</p> : null}
         </section>
