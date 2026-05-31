@@ -1,12 +1,10 @@
 import { Component, type ErrorInfo, lazy, type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
 import { PreferenceForm } from "./components/PreferenceForm";
 import { RealtimeAlert } from "./components/RealtimeAlert";
 import { SkeletonLoader } from "./components/SkeletonLoader";
 import { useOfflineCache } from "./hooks/useOfflineCache";
 import { useRealtimeChannel } from "./hooks/useRealtimeChannel";
 import { useTripPlanner } from "./hooks/useTripPlanner";
-import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import type { PreferencesInput } from "./lib/schemas";
 
 const ItineraryView = lazy(() => import("./components/ItineraryView"));
@@ -44,24 +42,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-/** Renders the TripMind single-page app shell and wires auth, alerts, cache, and planning. */
+/** Renders the TripMind single-page app shell and wires alerts, cache, and planning. */
 export default function App() {
-  const [email, setEmail] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
-  const [session, setSession] = useState<Session | null>(null);
   const [tab, setTab] = useState("Plan");
   const planner = useTripPlanner();
   const cache = useOfflineCache();
   const realtime = useRealtimeChannel(planner.tripId);
   const { cachedItinerary, isFromCache, save } = cache;
   const { itinerary, setItinerary } = planner;
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return undefined;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => data.subscription.unsubscribe();
-  }, []);
 
   useEffect(() => {
     if (!itinerary && cachedItinerary) setItinerary(cachedItinerary);
@@ -71,34 +59,11 @@ export default function App() {
     if (itinerary) save(itinerary);
   }, [itinerary, save]);
 
-  const signIn = useCallback(async () => {
-    if (!isSupabaseConfigured) {
-      setAuthMessage("Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local to enable sign-in.");
-      return;
-    }
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin }
-    });
-    setAuthMessage(error ? error.message : "Magic link sent. Check your inbox.");
-  }, [email]);
-
   const submitPreferences = useCallback(async (preferences: PreferencesInput) => {
-    setAuthMessage("");
     const response = await planner.plan(preferences);
-    if (session) {
-      await fetch("/api/context", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify(preferences)
-      });
-    }
     if (response.trip_id) planner.setTripId(response.trip_id);
     setTab("Trips");
-  }, [planner, session]);
+  }, [planner]);
 
   return (
     <ErrorBoundary>
@@ -108,21 +73,7 @@ export default function App() {
         <div>
           <p>India travel planner</p>
           <h1>TripMind</h1>
-        </div>
-        <div className="auth-panel" aria-live="polite">
-          {session ? (
-            <>
-              <span>{session.user.email}</span>
-              <button type="button" onClick={() => supabase.auth.signOut()}>Sign out</button>
-            </>
-          ) : (
-            <>
-              <label className="sr-only" htmlFor="email">Email</label>
-              <input id="email" type="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />
-              <button type="button" onClick={signIn} disabled={!email && isSupabaseConfigured}>Magic link</button>
-            </>
-          )}
-          {authMessage ? <small>{authMessage}</small> : null}
+          <span>Plan practical, train-first India trips from real constraints.</span>
         </div>
       </header>
 
@@ -145,7 +96,7 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <h2>Your itinerary will appear here</h2>
-              <p>Choose your preferences and TripMind will plan a train-first India route. Sign in only if you want to save it.</p>
+              <p>Choose your preferences and TripMind will plan a train-first India route.</p>
             </div>
           )}
         </section>
@@ -168,14 +119,10 @@ export default function App() {
           )}
         </aside>
 
-        <section className={tab === "Profile" ? "panel visible" : "panel profile-panel"}>
-          <h2>Profile</h2>
-          <p>{session ? "Your Supabase session is active." : "Planning works without email. Use magic link only to save trips and preferences."}</p>
-        </section>
       </main>
 
       <nav className="bottom-nav" aria-label="Mobile sections">
-        {["Plan", "Trips", "Alerts", "Profile"].map((item) => (
+        {["Plan", "Trips", "Alerts"].map((item) => (
           <button type="button" className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)}>
             {item}
           </button>
@@ -183,7 +130,7 @@ export default function App() {
       </nav>
 
       <footer>
-        <span>TripMind turns constraints into bookable India travel plans with optional saved trips.</span>
+        <span>TripMind turns constraints into bookable India travel plans.</span>
       </footer>
     </div>
     </ErrorBoundary>
