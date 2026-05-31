@@ -3,17 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTripPlanner } from '../hooks/useTripPlanner'
 import type { PreferencesInput, TripResponse } from '../lib/schemas'
 
-const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }))
-
-vi.mock('../lib/supabase', () => ({
-  isSupabaseConfigured: true,
-  supabase: {
-    auth: {
-      getSession
-    }
-  }
-}))
-
 const preferences: PreferencesInput = {
   destination: 'Jaipur',
   startDate: '2026-06-10',
@@ -78,7 +67,6 @@ const tripResponse: TripResponse = {
 describe('useTripPlanner', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    getSession.mockResolvedValue({ data: { session: { access_token: 'token' } } })
   })
 
   it('turns loading true when plan starts', async () => {
@@ -148,7 +136,6 @@ describe('useTripPlanner', () => {
   })
 
   it('plans without an email session', async () => {
-    getSession.mockResolvedValue({ data: { session: null } })
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ request_id: 'req_guest', itinerary: tripResponse.itinerary })

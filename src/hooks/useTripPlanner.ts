@@ -1,22 +1,7 @@
 import { useCallback, useState } from "react";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ItinerarySchema, TripResponseSchema, type Itinerary, type PreferencesInput, type RealtimeSignal } from "../lib/schemas";
 
-/** Returns JSON headers, adding auth only when the traveller is signed in. */
-async function requestHeaders(requireAuth = false): Promise<HeadersInit> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (!isSupabaseConfigured) {
-    if (requireAuth) throw new Error("Supabase env is missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.");
-    return headers;
-  }
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) {
-    if (requireAuth) throw new Error("Sign in before replanning a saved trip.");
-    return headers;
-  }
-  return { ...headers, Authorization: `Bearer ${token}` };
-}
+const jsonHeaders: HeadersInit = { "Content-Type": "application/json" };
 
 /** Manages TripMind plan and replan API calls plus itinerary request state. */
 export function useTripPlanner() {
@@ -32,7 +17,7 @@ export function useTripPlanner() {
     try {
       const response = await fetch("/api/plan", {
         method: "POST",
-        headers: await requestHeaders(),
+        headers: jsonHeaders,
         body: JSON.stringify(prefs)
       });
       const json = await response.json();
@@ -60,7 +45,7 @@ export function useTripPlanner() {
         const before = itinerary;
         const response = await fetch("/api/replan", {
           method: "POST",
-          headers: await requestHeaders(true),
+          headers: jsonHeaders,
           body: JSON.stringify({ trip_id: tripId, signal, current_itinerary: itinerary })
         });
         const json = await response.json();
