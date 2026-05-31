@@ -1,4 +1,4 @@
-import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared.js";
+import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, fallbackItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared.js";
 
 export const config = edgeConfig;
 
@@ -39,7 +39,10 @@ ${JSON.stringify(preferences)}
 
 Return JSON with keys: destination, total_cost_inr, scores, constraints, festival_warnings, warnings, train, days. Each day must include activities with id, time, title, location, category, description, local_tip, cost_inr, duration_minutes, dietary_tags, accessibility_notes, must_do, and optional alt_if_closed.`;
 
-    const itinerary = await askGeminiForItinerary(prompt);
+    const itinerary = await Promise.race([
+      askGeminiForItinerary(prompt, 8_000).catch(() => fallbackItinerary(preferences)),
+      new Promise<ReturnType<typeof fallbackItinerary>>((resolve) => setTimeout(() => resolve(fallbackItinerary(preferences)), 9_000))
+    ]);
     if (!user) return json({ request_id: id, itinerary }, 200, { "X-Request-Id": id });
 
     const saved = await supabase

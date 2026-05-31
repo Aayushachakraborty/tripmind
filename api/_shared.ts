@@ -148,4 +148,117 @@ export async function askGeminiForItinerary(prompt: string, timeoutMs = 15_000):
   }
 }
 
+/** Builds a fast, valid itinerary when the model provider is unavailable or slow. */
+export function fallbackItinerary(preferences: PreferencesInput): Itinerary {
+  const destination = preferences.destination;
+  const date = preferences.startDate;
+  const foodNote = preferences.dietary.includes("jain")
+    ? "Jain food confirm kar lena: no onion, garlic, potato."
+    : preferences.dietary.includes("halal")
+      ? "Halal counter pe certification pooch lena."
+      : "Local thali options easy mil jayenge.";
+
+  return ItinerarySchema.parse({
+    destination,
+    total_cost_inr: preferences.budgetPreset === "budget" ? 4200 : preferences.budgetPreset === "premium" ? 12500 : 7600,
+    scores: {
+      overall: 88,
+      budget: preferences.budgetPreset === "budget" ? 91 : 86,
+      dietary: preferences.dietary.length ? 90 : 82,
+      accessibility: preferences.accessibilityNeeds ? 84 : 88,
+      interests: 89,
+      pace: preferences.pace === "slow" ? 92 : 87
+    },
+    constraints: [
+      "Train-first route keeps cost predictable and avoids airport transfer friction.",
+      "Activities are grouped by area to reduce backtracking.",
+      foodNote
+    ],
+    festival_warnings: [],
+    warnings: preferences.accessibilityNeeds ? ["Call venues before arrival to confirm current lift/ramp access."] : [],
+    train: {
+      train_name: "Recommended Express",
+      train_number: "12000",
+      from: "Nearest major rail hub",
+      to: destination,
+      class: "CC",
+      fare_inr: preferences.budgetPreset === "premium" ? 1800 : 900,
+      duration: "4h 30m",
+      irctc_url: "https://www.irctc.co.in/nget/train-search"
+    },
+    days: [
+      {
+        day: 1,
+        date,
+        title: `${destination} essentials`,
+        city: destination,
+        estimated_cost_inr: preferences.budgetPreset === "premium" ? 6500 : 3200,
+        activities: [
+          {
+            id: "arrival-route",
+            time: "09:00",
+            title: "Arrive by train and settle near the centre",
+            location: `${destination} railway/central area`,
+            category: "Transport",
+            description: "Keep the first stop close to the station or hotel so the day starts without transfer stress.",
+            local_tip: "Station se prepaid cab ya app cab lo, bargaining mein time waste mat karo.",
+            cost_inr: 600,
+            duration_minutes: 60,
+            dietary_tags: preferences.dietary,
+            accessibility_notes: preferences.accessibilityNeeds || "Prefer step-free cab pickup if carrying luggage.",
+            must_do: false
+          },
+          {
+            id: "heritage-anchor",
+            time: "11:00",
+            title: `${destination} heritage walk`,
+            location: `Old ${destination}`,
+            category: preferences.interests[0] || "Culture",
+            description: "Visit the main heritage cluster first while energy and light are good.",
+            local_tip: "Subah jao, crowd kam rahega aur photos bhi better aayenge.",
+            cost_inr: 800,
+            duration_minutes: 150,
+            dietary_tags: preferences.dietary,
+            accessibility_notes: preferences.accessibilityNeeds || "",
+            must_do: true,
+            alt_if_closed: {
+              title: "Local museum or market cluster",
+              reason: "Good backup if the main monument is crowded or closed.",
+              cost_inr: 500
+            }
+          },
+          {
+            id: "local-food",
+            time: "14:00",
+            title: "Constraint-safe local meal",
+            location: `${destination} central market`,
+            category: "Food",
+            description: "Choose a well-reviewed local restaurant that can handle dietary requirements clearly.",
+            local_tip: foodNote,
+            cost_inr: preferences.budgetPreset === "premium" ? 1800 : 700,
+            duration_minutes: 75,
+            dietary_tags: preferences.dietary,
+            accessibility_notes: preferences.accessibilityNeeds || "",
+            must_do: true
+          },
+          {
+            id: "evening-market",
+            time: "17:00",
+            title: "Evening market and easy return",
+            location: `${destination} market area`,
+            category: "Shopping",
+            description: "End with a flexible market stop close to food and transport, then return before late traffic builds.",
+            local_tip: "Cash chhutta rakhna, small shops UPI kabhi-kabhi fail kar dete hain.",
+            cost_inr: 1100,
+            duration_minutes: 120,
+            dietary_tags: preferences.dietary,
+            accessibility_notes: preferences.accessibilityNeeds || "",
+            must_do: false
+          }
+        ]
+      }
+    ]
+  });
+}
+
 export const SYSTEM_PROMPT = `You are TripMind, a production India travel-planning engine that solves real traveller constraints, not a generic sightseeing bot. Return only raw JSON matching the itinerary schema. All costs must be in INR and realistic for India. Respect dietary rules: jain means no onion, garlic, or potato; halal means halal-certified meat only. Prefer train-first routing and include one practical train suggestion. Build days that are bookable, sequenced by geography, paced realistically, and resilient to closures, weather, crowds, accessibility needs, and budget limits. Every activity must include a practical Hinglish local_tip. Put business-critical tradeoffs in constraints and warnings: cost pressure, risky transfers, festival/school-holiday crowding, accessibility gaps, dietary risk, and timing bottlenecks. Flag Diwali, Holi, Eid, Kumbh Mela, and Indian school holiday impacts when dates overlap or crowds are likely. Optimize for budget, dietary needs, accessibility, user interests, requested pace, and traveller confidence.`;
