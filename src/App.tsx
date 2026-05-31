@@ -84,19 +84,18 @@ export default function App() {
   }, [email]);
 
   const submitPreferences = useCallback(async (preferences: PreferencesInput) => {
-    if (!session) {
-      setAuthMessage("Sign in with magic link before planning your trip.");
-      return;
-    }
+    setAuthMessage("");
     const response = await planner.plan(preferences);
-    await fetch("/api/context", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token ?? ""}`
-      },
-      body: JSON.stringify(preferences)
-    });
+    if (session) {
+      await fetch("/api/context", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(preferences)
+      });
+    }
     if (response.trip_id) planner.setTripId(response.trip_id);
     setTab("Trips");
   }, [planner, session]);
@@ -130,8 +129,6 @@ export default function App() {
       <main id="main" className="main-grid">
         <section className={tab === "Plan" ? "panel visible" : "panel"}>
           <PreferenceForm
-            disabled={!session}
-            disabledReason={!session ? "Sign in with magic link to generate and save your itinerary." : ""}
             loading={planner.loading}
             onSubmit={submitPreferences}
           />
@@ -148,7 +145,7 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <h2>Your itinerary will appear here</h2>
-              <p>Sign in, choose your preferences, and TripMind will plan a train-first India route.</p>
+              <p>Choose your preferences and TripMind will plan a train-first India route. Sign in only if you want to save it.</p>
             </div>
           )}
         </section>
@@ -173,7 +170,7 @@ export default function App() {
 
         <section className={tab === "Profile" ? "panel visible" : "panel profile-panel"}>
           <h2>Profile</h2>
-          <p>{session ? "Your Supabase session is active." : "Use magic link sign-in to save trips and preferences."}</p>
+          <p>{session ? "Your Supabase session is active." : "Planning works without email. Use magic link only to save trips and preferences."}</p>
         </section>
       </main>
 
@@ -186,7 +183,7 @@ export default function App() {
       </nav>
 
       <footer>
-        <span>TripMind plans with Supabase realtime and Gemini reasoning.</span>
+        <span>TripMind turns constraints into bookable India travel plans with optional saved trips.</span>
       </footer>
     </div>
     </ErrorBoundary>

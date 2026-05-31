@@ -49,6 +49,16 @@ export async function getUser(req: Request) {
   return { supabase, user: data.user };
 }
 
+/** Returns the authenticated user when a bearer token is present, otherwise guest mode. */
+export async function getOptionalUser(req: Request) {
+  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) return { supabase: null, user: null };
+  const supabase = adminClient();
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return { supabase, user: null };
+  return { supabase, user: data.user };
+}
+
 /** Enforces a fixed-window per-user endpoint rate limit. */
 export async function checkRateLimit(userId: string, endpoint: string): Promise<void> {
   const supabase = adminClient();
@@ -138,4 +148,4 @@ export async function askGeminiForItinerary(prompt: string, timeoutMs = 15_000):
   }
 }
 
-export const SYSTEM_PROMPT = `You are TripMind, a production India travel-planning engine. Return only raw JSON matching the itinerary schema. All costs must be in INR. Respect dietary rules: jain means no onion, garlic, or potato; halal means halal-certified meat only. Prefer train-first routing and include one practical train suggestion. Every activity must include a Hinglish local_tip. Flag Diwali, Holi, Eid, Kumbh Mela, and Indian school holiday impacts when dates overlap or crowds are likely. Optimize for budget, dietary needs, accessibility, user interests, and requested pace.`;
+export const SYSTEM_PROMPT = `You are TripMind, a production India travel-planning engine that solves real traveller constraints, not a generic sightseeing bot. Return only raw JSON matching the itinerary schema. All costs must be in INR and realistic for India. Respect dietary rules: jain means no onion, garlic, or potato; halal means halal-certified meat only. Prefer train-first routing and include one practical train suggestion. Build days that are bookable, sequenced by geography, paced realistically, and resilient to closures, weather, crowds, accessibility needs, and budget limits. Every activity must include a practical Hinglish local_tip. Put business-critical tradeoffs in constraints and warnings: cost pressure, risky transfers, festival/school-holiday crowding, accessibility gaps, dietary risk, and timing bottlenecks. Flag Diwali, Holi, Eid, Kumbh Mela, and Indian school holiday impacts when dates overlap or crowds are likely. Optimize for budget, dietary needs, accessibility, user interests, requested pace, and traveller confidence.`;

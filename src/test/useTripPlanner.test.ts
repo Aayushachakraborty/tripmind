@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTripPlanner } from '../hooks/useTripPlanner'
 import type { PreferencesInput, TripResponse } from '../lib/schemas'
 
+const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }))
+
 vi.mock('../lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'token' } } })
+      getSession
     }
   }
 }))
@@ -76,6 +78,7 @@ const tripResponse: TripResponse = {
 describe('useTripPlanner', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    getSession.mockResolvedValue({ data: { session: { access_token: 'token' } } })
   })
 
   it('turns loading true when plan starts', async () => {
@@ -142,5 +145,25 @@ describe('useTripPlanner', () => {
     expect(result.current.itinerary).toMatchObject({ destination: 'Jaipur' })
     expect(result.current.tripId).toBe('trip_1')
     expect(result.current.requestId).toBe('req_1')
+  })
+
+  it('plans without an email session', async () => {
+    getSession.mockResolvedValue({ data: { session: null } })
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ request_id: 'req_guest', itinerary: tripResponse.itinerary })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const { result } = renderHook(() => useTripPlanner())
+
+    await act(async () => {
+      await result.current.plan(preferences)
+    })
+
+    expect(fetch).toHaveBeenCalledWith('/api/plan', expect.objectContaining({
+      headers: { 'Content-Type': 'application/json' }
+    }))
+    expect(result.current.itinerary?.destination).toBe('Jaipur')
+    expect(result.current.requestId).toBe('req_guest')
   })
 })

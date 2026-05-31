@@ -1,26 +1,28 @@
-import { json, getUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared";
+import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig } from "./_shared";
 
 export const config = edgeConfig;
 
-/** Handles authenticated itinerary generation and cache lookup requests. */
+/** Handles guest-first itinerary generation with saved-trip caching for signed-in users. */
 export default async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
   try {
-    const { supabase, user } = await getUser(req);
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, { "X-Request-Id": id });
-    await checkRateLimit(user.id, "plan");
+    const { supabase, user } = await getOptionalUser(req);
+    if (user) await checkRateLimit(user.id, "plan");
     const body = await req.json();
     const preferences = parsePreferences(body);
     const preferencesHash = await sha256(preferences);
 
-    const cached = await supabase
-      .from("trips")
-      .select("id,data")
-      .eq("user_id", user.id)
-      .eq("preferences_hash", preferencesHash)
-      .maybeSingle();
+    const cached = user
+      ? await supabase
+          .from("trips")
+          .select("id,data")
+          .eq("user_id", user.id)
+          .eq("preferences_hash", preferencesHash)
+          .maybeSingle()
+      : { data: null };
 
     if (cached.data?.data) {
       return json(
@@ -38,6 +40,8 @@ ${JSON.stringify(preferences)}
 Return JSON with keys: destination, total_cost_inr, scores, constraints, festival_warnings, warnings, train, days. Each day must include activities with id, time, title, location, category, description, local_tip, cost_inr, duration_minutes, dietary_tags, accessibility_notes, must_do, and optional alt_if_closed.`;
 
     const itinerary = await askGeminiForItinerary(prompt);
+    if (!user) return json({ request_id: id, itinerary }, 200, { "X-Request-Id": id });
+
     const saved = await supabase
       .from("trips")
       .insert({
@@ -48,7 +52,6 @@ Return JSON with keys: destination, total_cost_inr, scores, constraints, festiva
       })
       .select("id")
       .single();
-
     if (saved.error) throw saved.error;
     return json({ request_id: id, trip_id: saved.data.id, itinerary }, 200, { "X-Request-Id": id });
   } catch (error) {
