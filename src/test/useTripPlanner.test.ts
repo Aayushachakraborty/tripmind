@@ -1,4 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createElement } from 'react'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTripPlanner } from '../hooks/useTripPlanner'
 import type { PreferencesInput, TripResponse } from '../lib/schemas'
@@ -65,6 +68,11 @@ const tripResponse: TripResponse = {
 }
 
 describe('useTripPlanner', () => {
+  function wrapper({ children }: { children: ReactNode }) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    return createElement(QueryClientProvider, { client }, children)
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks()
   })
@@ -80,7 +88,7 @@ describe('useTripPlanner', () => {
           })
       )
     )
-    const { result } = renderHook(() => useTripPlanner())
+    const { result } = renderHook(() => useTripPlanner(), { wrapper })
 
     let request!: Promise<TripResponse>
     act(() => {
@@ -106,7 +114,7 @@ describe('useTripPlanner', () => {
         json: async () => ({ error: 'Planning failed loudly' })
       })
     )
-    const { result } = renderHook(() => useTripPlanner())
+    const { result } = renderHook(() => useTripPlanner(), { wrapper })
 
     await act(async () => {
       await expect(result.current.plan(preferences)).rejects.toThrow('Planning failed loudly')
@@ -124,7 +132,7 @@ describe('useTripPlanner', () => {
         json: async () => tripResponse
       })
     )
-    const { result } = renderHook(() => useTripPlanner())
+    const { result } = renderHook(() => useTripPlanner(), { wrapper })
 
     await act(async () => {
       await result.current.plan(preferences)
@@ -141,7 +149,7 @@ describe('useTripPlanner', () => {
       json: async () => ({ request_id: 'req_guest', itinerary: tripResponse.itinerary })
     })
     vi.stubGlobal('fetch', fetch)
-    const { result } = renderHook(() => useTripPlanner())
+    const { result } = renderHook(() => useTripPlanner(), { wrapper })
 
     await act(async () => {
       await result.current.plan(preferences)

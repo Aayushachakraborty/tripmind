@@ -8,34 +8,56 @@ export type Database = {
           id: string;
           user_id: string;
           destination: string;
+          date_from: string;
+          date_to: string;
+          preferences_snapshot: unknown;
           preferences_hash: string;
-          data: unknown;
+          itinerary_data: unknown;
+          source: "manual" | "reel_import";
+          reel_url: string | null;
+          status: string;
           created_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
           destination: string;
+          date_from: string;
+          date_to: string;
+          preferences_snapshot: unknown;
           preferences_hash: string;
-          data: unknown;
+          itinerary_data: unknown;
+          source?: "manual" | "reel_import";
+          reel_url?: string | null;
+          status?: string;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["trips"]["Insert"]>;
       };
-      preferences: {
-        Row: { user_id: string; data: unknown; updated_at: string };
-        Insert: { user_id: string; data: unknown; updated_at?: string };
-        Update: { data?: unknown; updated_at?: string };
+      users_profile: {
+        Row: { id: string; full_name: string | null; phone: string | null; preferred_language: string; onboarding_complete: boolean; created_at: string; updated_at: string };
+        Insert: { id: string; full_name?: string | null; phone?: string | null; preferred_language?: string; onboarding_complete?: boolean; created_at?: string; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["users_profile"]["Insert"]>;
+      };
+      user_preferences: {
+        Row: { id: string; user_id: string; dietary: string[]; pace: string; budget_per_day_inr: number; interests: string[]; group_type: string; home_city: string | null; accessibility_needs: string[]; updated_at: string };
+        Insert: { id?: string; user_id: string; dietary?: string[]; pace?: string; budget_per_day_inr?: number; interests?: string[]; group_type?: string; home_city?: string | null; accessibility_needs?: string[]; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["user_preferences"]["Insert"]>;
       };
       itinerary_versions: {
-        Row: { trip_id: string; version: number; data: unknown };
-        Insert: { trip_id: string; version: number; data: unknown };
-        Update: { data?: unknown };
+        Row: { id: string; trip_id: string; version: number; changed_segments: unknown; trigger_signal: unknown; created_at: string };
+        Insert: { id?: string; trip_id: string; version: number; changed_segments?: unknown; trigger_signal?: unknown; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["itinerary_versions"]["Insert"]>;
       };
       rate_limits: {
-        Row: { user_id: string; endpoint: string; request_count: number; window_start: string };
-        Insert: { user_id: string; endpoint: string; request_count?: number; window_start?: string };
-        Update: { request_count?: number; window_start?: string };
+        Row: { id: string; user_id: string; endpoint: string; request_count: number; window_start: string };
+        Insert: { id?: string; user_id: string; endpoint: string; request_count?: number; window_start?: string };
+        Update: Partial<Database["public"]["Tables"]["rate_limits"]["Insert"]>;
+      };
+      analytics_events: {
+        Row: { id: string; event_name: string; user_id: string | null; properties: unknown; session_id: string | null; created_at: string };
+        Insert: { id?: string; event_name: string; user_id?: string | null; properties?: unknown; session_id?: string | null; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["analytics_events"]["Insert"]>;
       };
     };
   };

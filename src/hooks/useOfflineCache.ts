@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ItinerarySchema, type Itinerary } from "../lib/schemas";
 
-const CACHE_KEY = "tripmind:last-itinerary";
+const CACHE_KEY = "safar:v1:last-itinerary";
 
 /** Persists and restores the latest itinerary from localStorage for offline viewing. */
 export function useOfflineCache() {

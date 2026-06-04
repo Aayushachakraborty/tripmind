@@ -1,30 +1,51 @@
 import { FormEvent, memo, useCallback, useEffect, useMemo, useState } from "react";
-import { BUDGET_PRESETS, DIETARY_OPTIONS, INDIAN_CITIES, INTEREST_OPTIONS, PACE_OPTIONS } from "../constants";
+import { BUDGET_PRESETS, DESTINATION_SUGGESTIONS, DIETARY_OPTIONS, INTEREST_OPTIONS, PACE_OPTIONS } from "../constants";
+import { convertFromUsd, formatMoney, type CurrencyCode } from "../hooks/useCurrencyRates";
 import type { PreferencesInput } from "../lib/schemas";
-import { formatINR } from "../utils/formatters";
 import { sanitiseInput } from "../utils/validators";
 
 type Props = {
   loading: boolean;
   onSubmit: (preferences: PreferencesInput) => Promise<void>;
+  initialValues?: Partial<PreferencesInput> | null;
+  currency?: CurrencyCode;
+  rates?: Record<CurrencyCode, number>;
 };
 
 const today = new Date().toISOString().slice(0, 10);
+const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 
 /** Renders the trip preferences form with debounced destination selection. */
-function PreferenceFormComponent({ loading, onSubmit }: Props) {
-  const [destinationDraft, setDestinationDraft] = useState("Jaipur");
-  const [destination, setDestination] = useState("Jaipur");
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
-  const [budgetPreset, setBudgetPreset] = useState<PreferencesInput["budgetPreset"]>("comfort");
-  const [dietary, setDietary] = useState<PreferencesInput["dietary"]>(["veg"]);
-  const [pace, setPace] = useState<PreferencesInput["pace"]>("moderate");
-  const [interests, setInterests] = useState<string[]>(["History", "Food", "Local markets"]);
-  const [groupType, setGroupType] = useState<PreferencesInput["groupType"]>("couple");
-  const [transport, setTransport] = useState<PreferencesInput["transport"]>("train");
-  const [accessibilityNeeds, setAccessibilityNeeds] = useState("");
-  const popularCities = useMemo(() => [...INDIAN_CITIES], []);
+function PreferenceFormComponent({ loading, onSubmit, initialValues, currency = "USD", rates }: Props) {
+  const [destinationDraft, setDestinationDraft] = useState(initialValues?.destination ?? "Tokyo");
+  const [destination, setDestination] = useState(initialValues?.destination ?? "Tokyo");
+  const [startDate, setStartDate] = useState(initialValues?.startDate ?? today);
+  const [endDate, setEndDate] = useState(initialValues?.endDate ?? tomorrow);
+  const [budgetPreset, setBudgetPreset] = useState<PreferencesInput["budgetPreset"]>(initialValues?.budgetPreset ?? "comfort");
+  const [dietary, setDietary] = useState<PreferencesInput["dietary"]>(initialValues?.dietary ?? ["none"]);
+  const [pace, setPace] = useState<PreferencesInput["pace"]>(initialValues?.pace ?? "balanced");
+  const [interests, setInterests] = useState<string[]>(initialValues?.interests ?? ["Culture", "Food", "Photography"]);
+  const [groupType, setGroupType] = useState<PreferencesInput["groupType"]>(initialValues?.groupType ?? "couple");
+  const [transport, setTransport] = useState<PreferencesInput["transport"]>(initialValues?.transport ?? "mixed");
+  const [accessibilityNeeds, setAccessibilityNeeds] = useState(initialValues?.accessibilityNeeds ?? "");
+  const popularCities = useMemo(() => [...DESTINATION_SUGGESTIONS], []);
+
+  useEffect(() => {
+    if (!initialValues) return;
+    if (initialValues.destination) {
+      setDestinationDraft(initialValues.destination);
+      setDestination(initialValues.destination);
+    }
+    if (initialValues.startDate) setStartDate(initialValues.startDate);
+    if (initialValues.endDate) setEndDate(initialValues.endDate);
+    if (initialValues.budgetPreset) setBudgetPreset(initialValues.budgetPreset);
+    if (initialValues.dietary) setDietary(initialValues.dietary);
+    if (initialValues.pace) setPace(initialValues.pace);
+    if (initialValues.interests) setInterests(initialValues.interests);
+    if (initialValues.groupType) setGroupType(initialValues.groupType);
+    if (initialValues.transport) setTransport(initialValues.transport);
+    if (initialValues.accessibilityNeeds !== undefined) setAccessibilityNeeds(initialValues.accessibilityNeeds);
+  }, [initialValues]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDestination(sanitiseInput(destinationDraft)), 300);
@@ -34,7 +55,8 @@ function PreferenceFormComponent({ loading, onSubmit }: Props) {
   const toggleDiet = useCallback((id: PreferencesInput["dietary"][number]) => {
     setDietary((current) => {
       const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      return id === "jain" && !next.includes("veg") ? [...next, "veg"] : next;
+      if (id === "none") return ["none"];
+      return next.filter((item) => item !== "none");
     });
   }, []);
 
@@ -70,7 +92,7 @@ function PreferenceFormComponent({ loading, onSubmit }: Props) {
           <label htmlFor="destination">Destination</label>
           <input id="destination" value={destinationDraft} onChange={(event) => setDestinationDraft(event.target.value)} required minLength={2} />
         </div>
-        <div className="city-pills full" aria-label="Popular Indian cities">
+        <div className="city-pills full" aria-label="AI destination suggestions">
           {popularCities.map((city) => (
             <button
               className={destination === city ? "pill active" : "pill"}
@@ -101,14 +123,14 @@ function PreferenceFormComponent({ loading, onSubmit }: Props) {
           {BUDGET_PRESETS.map((preset) => (
             <button type="button" className={budgetPreset === preset.id ? "option-card active" : "option-card"} key={preset.id} onClick={() => setBudgetPreset(preset.id)}>
               <strong>{preset.label}</strong>
-              <span>{formatINR(preset.dailyMin)} to {formatINR(preset.dailyMax)} / day</span>
+              <span>{formatMoney(convertFromUsd(preset.dailyMinUsd, currency, rates), currency)} to {formatMoney(convertFromUsd(preset.dailyMaxUsd, currency, rates), currency)} / day</span>
             </button>
           ))}
         </div>
       </section>
 
       <section className="choice-section" aria-labelledby="diet-title">
-        <h2 id="diet-title">Food</h2>
+        <h2 id="diet-title">Dietary</h2>
         <div className="toggle-row">
           {DIETARY_OPTIONS.map((option) => (
             <button
@@ -129,14 +151,14 @@ function PreferenceFormComponent({ loading, onSubmit }: Props) {
           {PACE_OPTIONS.map((option) => (
             <button type="button" className={pace === option.id ? "option-card active" : "option-card"} key={option.id} onClick={() => setPace(option.id)}>
               <strong>{option.label}</strong>
-              <span>{option.hindi}</span>
+              <span>{option.hint}</span>
             </button>
           ))}
         </div>
       </section>
 
       <section className="choice-section" aria-labelledby="interest-title">
-        <h2 id="interest-title">Interests</h2>
+        <h2 id="interest-title">Travel style</h2>
         <div className="toggle-row">
           {INTEREST_OPTIONS.map((interest) => (
             <button type="button" className={interests.includes(interest) ? "pill active" : "pill"} key={interest} onClick={() => toggleInterest(interest)}>
@@ -154,13 +176,12 @@ function PreferenceFormComponent({ loading, onSubmit }: Props) {
             <option value="couple">Couple</option>
             <option value="family">Family</option>
             <option value="friends">Friends</option>
-            <option value="senior">Senior travellers</option>
           </select>
         </div>
         <div className="field">
           <label htmlFor="transport">Transport</label>
           <select id="transport" value={transport} onChange={(event) => setTransport(event.target.value as PreferencesInput["transport"])}>
-            <option value="train">Train first</option>
+            <option value="train">Train</option>
             <option value="mixed">Mixed</option>
             <option value="flight">Flight</option>
             <option value="road">Road</option>

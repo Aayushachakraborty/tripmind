@@ -1,5 +1,5 @@
 import { ItinerarySchema } from "../src/lib/schemas.js";
-import { json, getUser, checkRateLimit, parseSignal, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig, nodeRequest, sendNodeResponse } from "./_shared.js";
+import { json, getUser, checkRateLimit, parseSignal, askGeminiForItinerary, requestId, SYSTEM_PROMPT, edgeConfig, nodeRequest, sendNodeResponse, logAudit, logAnalytics, isResponse } from "./_shared.js";
 
 export const config = edgeConfig;
 
@@ -8,9 +8,16 @@ async function handleReplan(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
+  const started = Date.now();
+  let userId: string | null = null;
+  let statusCode = 500;
   try {
     const { supabase, user } = await getUser(req);
-    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, { "X-Request-Id": id });
+    userId = user.id;
+    if (req.method !== "POST") {
+      statusCode = 405;
+      return json({ request_id: id, error: "Method not allowed" }, statusCode, { "X-Request-Id": id });
+    }
     await checkRateLimit(user.id, "replan");
     const body = await req.json();
     const tripId = String(body.trip_id ?? "");
@@ -19,7 +26,10 @@ async function handleReplan(req: Request): Promise<Response> {
     if (!tripId) return json({ request_id: id, error: "trip_id is required" }, 400, { "X-Request-Id": id });
 
     const trip = await supabase.from("trips").select("id").eq("id", tripId).eq("user_id", user.id).single();
-    if (trip.error) return json({ request_id: id, error: "Trip not found" }, 404, { "X-Request-Id": id });
+    if (trip.error) {
+      statusCode = 404;
+      return json({ request_id: id, error: "Trip not found" }, statusCode, { "X-Request-Id": id });
+    }
 
     const prompt = `${SYSTEM_PROMPT}
 
@@ -41,14 +51,25 @@ Return the full updated itinerary JSON with the same schema.`;
       .limit(1)
       .maybeSingle();
     const version = (latest.data?.version ?? 0) + 1;
-    await supabase.from("itinerary_versions").insert({ trip_id: tripId, version, data: itinerary });
-    await supabase.from("trips").update({ data: itinerary }).eq("id", tripId).eq("user_id", user.id);
+    await supabase.from("itinerary_versions").insert({
+      trip_id: tripId,
+      version,
+      changed_segments: { before: currentItinerary, after: itinerary },
+      trigger_signal: signal
+    });
+    await supabase.from("trips").update({ itinerary_data: itinerary }).eq("id", tripId).eq("user_id", user.id);
+    await logAnalytics(user.id, "replan_triggered", { signal_type: signal.type, trip_id: tripId });
 
+    statusCode = 200;
     return json({ request_id: id, trip_id: tripId, version, itinerary }, 200, { "X-Request-Id": id });
   } catch (error) {
-    if (error instanceof Response) return error;
-    const message = error instanceof Error ? error.message : "Unable to replan trip";
-    return json({ request_id: id, error: message }, 500, { "X-Request-Id": id });
+    if (isResponse(error)) {
+      statusCode = error.status;
+      return error;
+    }
+    return json({ request_id: id, error: "Unable to replan trip" }, statusCode, { "X-Request-Id": id });
+  } finally {
+    await logAudit(req, userId, "replan", statusCode, Date.now() - started);
   }
 }
 

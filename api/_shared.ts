@@ -1,35 +1,70 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
-import { ItinerarySchema, PreferencesInputSchema, RealtimeSignalSchema } from "../src/lib/schemas.js";
-import type { Itinerary, PreferencesInput, RealtimeSignal } from "../src/lib/schemas.js";
+import { ContextInputSchema, ItinerarySchema, PreferencesInputSchema, RealtimeSignalSchema } from "../src/lib/schemas.js";
+import type { ContextInput, Itinerary, PreferencesInput, RealtimeSignal } from "../src/lib/schemas.js";
 import { sanitiseUnknown } from "../src/utils/validators.js";
 
 declare const process: { env: Record<string, string | undefined> };
 
-export const edgeConfig = { runtime: "edge" };
+export const edgeConfig = { runtime: "nodejs20.x" };
 
-const jsonHeaders = {
+const allowedOrigins = new Set(["https://safar.ai", "http://localhost:5173", "http://127.0.0.1:5173"]);
+
+function corsOrigin(origin: string | null): string {
+  if (origin && allowedOrigins.has(origin)) return origin;
+  return "https://safar.ai";
+}
+
+function jsonHeaders(origin?: string | null) {
+  return {
   "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": corsOrigin(origin ?? null),
   "Access-Control-Allow-Headers": "authorization, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS"
-};
+  };
+}
 
 /** Serialises API data as JSON with standard CORS headers. */
 export function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...jsonHeaders, ...extraHeaders }
+    headers: { ...jsonHeaders(extraHeaders["X-Origin"]), ...extraHeaders }
   });
+}
+
+/** Detects Web Response objects across Vercel/Node realms. */
+export function isResponse(error: unknown): error is Response {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    "headers" in error &&
+    "text" in error &&
+    typeof (error as { text?: unknown }).text === "function"
+  );
 }
 
 /** Converts a Vercel Node request into the Web Request shape used by shared handlers. */
 export function nodeRequest(req: any): Request {
   const method = req.method ?? "GET";
-  const body = method === "GET" || method === "HEAD" ? undefined : JSON.stringify(req.body ?? {});
-  return new Request(`https://tripmind.local${req.url ?? "/"}`, {
+  const headers = new Headers(req.headers);
+  headers.delete("content-length");
+  let parsedBody: unknown = {};
+  if (method !== "GET" && method !== "HEAD") {
+    try {
+      parsedBody = req.body ?? {};
+    } catch {
+      parsedBody = {};
+    }
+  }
+  const body = method === "GET" || method === "HEAD"
+    ? undefined
+    : typeof parsedBody === "string"
+      ? parsedBody
+      : JSON.stringify(parsedBody);
+  return new Request(`https://safar.local${req.url ?? "/"}`, {
     method,
-    headers: req.headers,
+    headers,
     body
   });
 }
@@ -54,15 +89,25 @@ export function adminClient() {
   });
 }
 
+/** Ensures existing auth users have a SAFAR profile row after migration. */
+async function ensureUserProfile(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
+  const supabase = adminClient();
+  await supabase.from("users_profile").upsert({
+    id: user.id,
+    full_name: typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : user.email ?? null
+  }, { onConflict: "id" });
+}
+
 /** Verifies the bearer JWT and returns the authenticated Supabase user. */
 export async function getUser(req: Request) {
   const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) throw new Response(JSON.stringify({ error: "Missing bearer token" }), { status: 401, headers: jsonHeaders });
+  if (!token) throw json({ error: "Authentication required" }, 401);
   const supabase = adminClient();
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) {
-    throw new Response(JSON.stringify({ error: "Invalid session" }), { status: 401, headers: jsonHeaders });
+    throw json({ error: "Authentication required" }, 401);
   }
+  await ensureUserProfile(data.user);
   return { supabase, user: data.user };
 }
 
@@ -77,10 +122,10 @@ export async function getOptionalUser(req: Request) {
 }
 
 /** Enforces a fixed-window per-user endpoint rate limit. */
-export async function checkRateLimit(userId: string, endpoint: string): Promise<void> {
+export async function checkRateLimit(userId: string, endpoint: string, limit = 10, windowMs = 60_000): Promise<void> {
   const supabase = adminClient();
   const now = new Date();
-  const windowStart = new Date(now.getTime() - 60_000).toISOString();
+  const windowStart = new Date(now.getTime() - windowMs).toISOString();
   const { data } = await supabase
     .from("rate_limits")
     .select("*")
@@ -98,11 +143,8 @@ export async function checkRateLimit(userId: string, endpoint: string): Promise<
     return;
   }
 
-  if (data.request_count >= 10) {
-    throw new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a minute." }), {
-      status: 429,
-      headers: jsonHeaders
-    });
+  if (data.request_count >= limit) {
+    throw json({ error: "Rate limit exceeded. Try again later." }, 429);
   }
 
   await supabase
@@ -110,6 +152,35 @@ export async function checkRateLimit(userId: string, endpoint: string): Promise<
     .update({ request_count: data.request_count + 1 })
     .eq("user_id", userId)
     .eq("endpoint", endpoint);
+}
+
+/** Inserts a request audit log without exposing operational errors to callers. */
+export async function logAudit(req: Request, userId: string | null, endpoint: string, statusCode: number, durationMs: number): Promise<void> {
+  try {
+    const supabase = adminClient();
+    await supabase.from("audit_logs").insert({
+      user_id: userId,
+      endpoint,
+      method: req.method,
+      ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "",
+      user_agent: req.headers.get("user-agent") ?? "",
+      status_code: statusCode,
+      duration_ms: durationMs
+    });
+  } catch {
+    // Audit logging must never leak implementation detail or break user responses.
+  }
+}
+
+/** Inserts analytics server-side for authenticated flows. */
+export async function logAnalytics(userId: string, eventName: string, properties: Record<string, unknown>, sessionId?: string): Promise<void> {
+  const supabase = adminClient();
+  await supabase.from("analytics_events").insert({
+    event_name: eventName,
+    user_id: userId,
+    properties,
+    session_id: sessionId
+  });
 }
 
 /** Produces a SHA-256 hash for cacheable request payloads. */
@@ -131,6 +202,11 @@ export function parsePreferences(input: unknown): PreferencesInput {
   return PreferencesInputSchema.parse(sanitiseUnknown(input));
 }
 
+/** Parses and sanitises profile/preference context input for API use. */
+export function parseContext(input: unknown): ContextInput {
+  return ContextInputSchema.parse(sanitiseUnknown(input));
+}
+
 /** Parses and sanitises realtime signal input for API use. */
 export function parseSignal(input: unknown): RealtimeSignal {
   return RealtimeSignalSchema.parse(sanitiseUnknown(input));
@@ -149,19 +225,17 @@ export async function askGeminiForItinerary(prompt: string, timeoutMs = 15_000):
     model: "gemini-2.0-flash",
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 3000,
+      maxOutputTokens: 4000,
       responseMimeType: "application/json"
     }
   });
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("Gemini request timed out")), timeoutMs);
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const result = await Promise.race([model.generateContent(prompt), timeout]);
+    const result = await model.generateContent(prompt, { signal: controller.signal } as never);
     return ItinerarySchema.parse(extractJson(result.response.text()));
   } finally {
-    clearTimeout(timer!);
+    clearTimeout(timer);
   }
 }
 
@@ -278,4 +352,4 @@ export function fallbackItinerary(preferences: PreferencesInput): Itinerary {
   });
 }
 
-export const SYSTEM_PROMPT = `You are TripMind, a production India travel-planning engine that solves real traveller constraints, not a generic sightseeing bot. Return only raw JSON matching the itinerary schema. All costs must be in INR and realistic for India. Respect dietary rules: jain means no onion, garlic, or potato; halal means halal-certified meat only. Prefer train-first routing and include one practical train suggestion. Build days that are bookable, sequenced by geography, paced realistically, and resilient to closures, weather, crowds, accessibility needs, and budget limits. Every activity must include a practical Hinglish local_tip. Put business-critical tradeoffs in constraints and warnings: cost pressure, risky transfers, festival/school-holiday crowding, accessibility gaps, dietary risk, and timing bottlenecks. Flag Diwali, Holi, Eid, Kumbh Mela, and Indian school holiday impacts when dates overlap or crowds are likely. Optimize for budget, dietary needs, accessibility, user interests, requested pace, and traveller confidence.`;
+export const SYSTEM_PROMPT = `You are SAFAR, a production global AI travel-planning engine that solves real traveller constraints, not a generic sightseeing bot. Return ONLY raw JSON: no markdown, no prose, no code fences. Costs in the JSON schema must remain numeric INR-equivalent fields for compatibility, but recommendations should be globally realistic for the destination. Respect dietary rules: vegetarian, vegan, halal, gluten-free, kosher, and no preference. Build routes across flights, trains, ferries, transit, walking, and rideshare as appropriate, with one practical transport booking suggestion in the train object. Every activity must include id, time, title, location, category, description, cost_inr, duration_minutes, local_tip, dietary_tags, accessibility_notes, must_do, and alt_if_closed. Flag local festival, event, weather, school-holiday, visa, safety, and closure risks. Include train with train_name, train_number, from, to, class, fare_inr, duration, irctc_url where irctc_url can be any secure booking or official transport URL. Include scores for overall, budget, dietary, accessibility, interests, pace from 0-100. Include constraint_explainer and warnings. Build days that are bookable, sequenced by geography, paced realistically, and resilient to closures, weather, crowds, accessibility needs, and budget limits.`;

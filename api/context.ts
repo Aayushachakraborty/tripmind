@@ -1,4 +1,4 @@
-import { json, getUser, checkRateLimit, parsePreferences, requestId, edgeConfig, nodeRequest, sendNodeResponse } from "./_shared.js";
+import { json, getUser, checkRateLimit, parseContext, requestId, edgeConfig, nodeRequest, sendNodeResponse, logAudit, logAnalytics, isResponse } from "./_shared.js";
 
 export const config = edgeConfig;
 
@@ -7,22 +7,44 @@ async function handleContext(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
+  const started = Date.now();
+  let userId: string | null = null;
+  let statusCode = 500;
   try {
     const { supabase, user } = await getUser(req);
-    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, { "X-Request-Id": id });
+    userId = user.id;
+    if (req.method !== "POST") {
+      statusCode = 405;
+      return json({ request_id: id, error: "Method not allowed" }, statusCode, { "X-Request-Id": id });
+    }
     await checkRateLimit(user.id, "context");
-    const preferences = parsePreferences(await req.json());
-    const { error } = await supabase.from("preferences").upsert({
+    const input = parseContext(await req.json());
+    const profile = {
+      id: user.id,
+      full_name: input.profile.full_name,
+      phone: input.profile.phone,
+      preferred_language: input.profile.preferred_language,
+      onboarding_complete: input.profile.onboarding_complete
+    };
+    const profileResult = await supabase.from("users_profile").upsert(profile);
+    if (profileResult.error) throw profileResult.error;
+
+    const preferencesResult = await supabase.from("user_preferences").upsert({
       user_id: user.id,
-      data: preferences,
-      updated_at: new Date().toISOString()
+      ...input.preferences
     });
-    if (error) throw error;
+    if (preferencesResult.error) throw preferencesResult.error;
+    await logAnalytics(user.id, "page_viewed", { page: "context_saved" });
+    statusCode = 200;
     return json({ request_id: id, saved: true }, 200, { "X-Request-Id": id });
   } catch (error) {
-    if (error instanceof Response) return error;
-    const message = error instanceof Error ? error.message : "Unable to save context";
-    return json({ request_id: id, error: message }, 500, { "X-Request-Id": id });
+    if (isResponse(error)) {
+      statusCode = error.status;
+      return error;
+    }
+    return json({ request_id: id, error: "Unable to save context" }, statusCode, { "X-Request-Id": id });
+  } finally {
+    await logAudit(req, userId, "context", statusCode, Date.now() - started);
   }
 }
 

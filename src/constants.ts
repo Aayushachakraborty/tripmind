@@ -1,55 +1,54 @@
-export const INDIAN_CITIES = [
-  "Delhi",
-  "Mumbai",
-  "Bengaluru",
-  "Chennai",
-  "Kolkata",
-  "Hyderabad",
-  "Pune",
-  "Jaipur",
-  "Ahmedabad",
-  "Varanasi",
-  "Goa",
-  "Kochi",
-  "Mysuru",
-  "Udaipur",
-  "Agra",
-  "Amritsar",
-  "Rishikesh",
-  "Darjeeling",
-  "Shillong",
-  "Leh"
+export const DESTINATION_SUGGESTIONS = [
+  "Swiss Alps",
+  "Bali",
+  "Tokyo",
+  "Marrakech",
+  "Santorini",
+  "Patagonia",
+  "New York",
+  "Dubai",
+  "Cape Town",
+  "Kyoto",
+  "Lisbon",
+  "Reykjavik",
+  "Banff",
+  "Maldives",
+  "Barcelona",
+  "Queenstown",
+  "Petra",
+  "Rio de Janeiro",
+  "Seoul",
+  "Istanbul"
 ] as const;
 
 export const DIETARY_OPTIONS = [
-  { id: "veg", label: "Veg", color: "#15803d" },
-  { id: "jain", label: "Jain", color: "#b45309" },
+  { id: "vegetarian", label: "Vegetarian", color: "#15803d" },
+  { id: "vegan", label: "Vegan", color: "#0f766e" },
   { id: "halal", label: "Halal", color: "#0f766e" },
-  { id: "egg", label: "Egg", color: "#ca8a04" },
-  { id: "nonveg", label: "Non-veg", color: "#b91c1c" }
+  { id: "gluten_free", label: "Gluten-free", color: "#b45309" },
+  { id: "kosher", label: "Kosher", color: "#4338ca" },
+  { id: "none", label: "No preference", color: "#78716c" }
 ] as const;
 
 export const BUDGET_PRESETS = [
-  { id: "budget", label: "Budget", dailyMin: 1500, dailyMax: 3000 },
-  { id: "comfort", label: "Comfort", dailyMin: 3500, dailyMax: 7000 },
-  { id: "premium", label: "Premium", dailyMin: 9000, dailyMax: 18000 }
+  { id: "backpacker", label: "Backpacker", dailyMinUsd: 45, dailyMaxUsd: 95 },
+  { id: "comfort", label: "Comfort", dailyMinUsd: 120, dailyMaxUsd: 260 },
+  { id: "luxury", label: "Luxury", dailyMinUsd: 350, dailyMaxUsd: 900 }
 ] as const;
 
 export const PACE_OPTIONS = [
-  { id: "slow", label: "Slow", hindi: "Aaram se" },
-  { id: "moderate", label: "Moderate", hindi: "Theek-thaak" },
-  { id: "fast", label: "Fast", hindi: "Tez raftaar" }
+  { id: "relaxed", label: "Relaxed", hint: "Slow mornings" },
+  { id: "balanced", label: "Balanced", hint: "Room to breathe" },
+  { id: "packed", label: "Packed", hint: "See more each day" }
 ] as const;
 
 export const INTEREST_OPTIONS = [
-  "History",
+  "Culture",
   "Food",
-  "Nature",
-  "Shopping",
-  "Spiritual",
-  "Beaches",
   "Adventure",
-  "Museums",
   "Nightlife",
-  "Local markets"
+  "Nature",
+  "Wellness",
+  "Photography",
+  "Shopping"
 ] as const;

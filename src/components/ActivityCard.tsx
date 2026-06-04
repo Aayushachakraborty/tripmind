@@ -1,10 +1,16 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { Activity } from "../lib/schemas";
-import { formatDuration, formatINR } from "../utils/formatters";
+import { track } from "../lib/analytics";
+import { convertFromInr, formatMoney, type CurrencyCode } from "../hooks/useCurrencyRates";
+import { formatDuration } from "../utils/formatters";
 
 /** Displays a single itinerary activity with cost, dietary, and backup details. */
-function ActivityCardComponent({ activity }: { activity: Activity }) {
+function ActivityCardComponent({ activity, currency = "USD", rates }: { activity: Activity; currency?: CurrencyCode; rates?: Record<CurrencyCode, number> }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    track("activity_impression", { activity_id: activity.id, category: activity.category, cost_inr: activity.cost_inr });
+  }, [activity.category, activity.cost_inr, activity.id]);
 
   return (
     <article className="activity-card">
@@ -24,7 +30,7 @@ function ActivityCardComponent({ activity }: { activity: Activity }) {
       <p>{activity.description}</p>
       <p className="local-tip">{activity.local_tip}</p>
       <div className="activity-meta">
-        <span>{formatINR(activity.cost_inr)}</span>
+        <span>{formatMoney(convertFromInr(activity.cost_inr, currency, rates), currency)}</span>
         <span>{formatDuration(activity.duration_minutes)}</span>
       </div>
       <div className="toggle-row">
@@ -42,7 +48,7 @@ function ActivityCardComponent({ activity }: { activity: Activity }) {
             <div>
               <strong>{activity.alt_if_closed.title}</strong>
               <p>{activity.alt_if_closed.reason}</p>
-              <span>{formatINR(activity.alt_if_closed.cost_inr)}</span>
+              <span>{formatMoney(convertFromInr(activity.alt_if_closed.cost_inr, currency, rates), currency)}</span>
             </div>
           ) : null}
         </div>

@@ -1,4 +1,4 @@
-import { json, getOptionalUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, fallbackItinerary, requestId, SYSTEM_PROMPT, edgeConfig, nodeRequest, sendNodeResponse } from "./_shared.js";
+import { json, getUser, checkRateLimit, sha256, parsePreferences, askGeminiForItinerary, fallbackItinerary, requestId, SYSTEM_PROMPT, edgeConfig, nodeRequest, sendNodeResponse, logAudit, logAnalytics, isResponse } from "./_shared.js";
 
 export const config = edgeConfig;
 
@@ -7,28 +7,39 @@ async function handlePlan(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return json({});
 
   const id = requestId();
+  const started = Date.now();
+  let userId: string | null = null;
+  let statusCode = 500;
   try {
-    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, { "X-Request-Id": id });
-    const { supabase, user } = await getOptionalUser(req);
-    if (user) await checkRateLimit(user.id, "plan");
+    const { supabase, user } = await getUser(req);
+    userId = user.id;
+    if (req.method !== "POST") {
+      statusCode = 405;
+      return json({ request_id: id, error: "Method not allowed" }, statusCode, { "X-Request-Id": id });
+    }
+    await checkRateLimit(user.id, "plan");
     const body = await req.json();
     const preferences = parsePreferences(body);
+    const source = preferences.source ?? "manual";
     const preferencesHash = await sha256(preferences);
 
-    const cached = user
-      ? await supabase
+    const cached = await supabase
           .from("trips")
-          .select("id,data")
+          .select("id,itinerary_data")
           .eq("user_id", user.id)
           .eq("preferences_hash", preferencesHash)
+          .gte("created_at", new Date(Date.now() - 86_400_000).toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle()
-      : { data: null };
+      ;
 
-    if (cached.data?.data) {
+    if (cached.data?.itinerary_data) {
+      statusCode = 200;
       return json(
-        { request_id: id, trip_id: cached.data.id, itinerary: cached.data.data },
+        { request_id: id, trip_id: cached.data.id, itinerary: cached.data.itinerary_data },
         200,
-        { "X-Request-Id": id, "X-TripMind-Cache": "hit" }
+        { "X-Request-Id": id, "X-Cache": "hit" }
       );
     }
 
@@ -39,28 +50,41 @@ ${JSON.stringify(preferences)}
 
 Return JSON with keys: destination, total_cost_inr, scores, constraints, festival_warnings, warnings, train, days. Each day must include activities with id, time, title, location, category, description, local_tip, cost_inr, duration_minutes, dietary_tags, accessibility_notes, must_do, and optional alt_if_closed.`;
 
-    const itinerary = await Promise.race([
-      askGeminiForItinerary(prompt, 8_000).catch(() => fallbackItinerary(preferences)),
-      new Promise<ReturnType<typeof fallbackItinerary>>((resolve) => setTimeout(() => resolve(fallbackItinerary(preferences)), 9_000))
-    ]);
-    if (!user) return json({ request_id: id, itinerary }, 200, { "X-Request-Id": id });
+    const itinerary = await askGeminiForItinerary(prompt, 15_000).catch(() => fallbackItinerary(preferences));
 
     const saved = await supabase
       .from("trips")
       .insert({
         user_id: user.id,
         destination: preferences.destination,
+        date_from: preferences.startDate,
+        date_to: preferences.endDate,
+        preferences_snapshot: preferences,
         preferences_hash: preferencesHash,
-        data: itinerary
+        itinerary_data: itinerary,
+        source,
+        reel_url: preferences.reelUrl
       })
       .select("id")
       .single();
     if (saved.error) throw saved.error;
-    return json({ request_id: id, trip_id: saved.data.id, itinerary }, 200, { "X-Request-Id": id });
+    await logAnalytics(user.id, "trip_planned", {
+      destination: preferences.destination,
+      budget: preferences.budgetPreset,
+      dietary: preferences.dietary,
+      days: itinerary.days.length,
+      source
+    });
+    statusCode = 200;
+    return json({ request_id: id, trip_id: saved.data.id, itinerary }, 200, { "X-Request-Id": id, "X-Cache": "miss" });
   } catch (error) {
-    if (error instanceof Response) return error;
-    const message = error instanceof Error ? error.message : "Unable to plan trip";
-    return json({ request_id: id, error: message }, 500, { "X-Request-Id": id });
+    if (isResponse(error)) {
+      statusCode = error.status;
+      return error;
+    }
+    return json({ request_id: id, error: "Unable to plan trip" }, statusCode, { "X-Request-Id": id });
+  } finally {
+    await logAudit(req, userId, "plan", statusCode, Date.now() - started);
   }
 }
 

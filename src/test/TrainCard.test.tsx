@@ -15,12 +15,12 @@ const train: Itinerary['train'] = {
 }
 
 describe('TrainCard', () => {
-  it('renders train name and secure IRCTC link', () => {
+  it('renders route name and secure booking link', () => {
     render(<TrainCard train={train} />)
 
     expect(screen.getByText(/Ajmer Shatabdi/)).toBeInTheDocument()
 
-    const link = screen.getByRole('link', { name: /book on irctc/i })
+    const link = screen.getByRole('link', { name: /book route/i })
     expect(link).toHaveAttribute('href', 'https://www.irctc.co.in/nget/train-search')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))

@@ -1,11 +1,24 @@
 import { Component, type ErrorInfo, lazy, type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
+import { AuthPanel } from "./components/AuthPanel";
+import { CreatorWidget } from "./components/CreatorWidget";
+import { DestinationHero, type SceneType } from "./components/DestinationHero";
+import { GlobalControls } from "./components/GlobalControls";
+import { OnboardingFlow } from "./components/OnboardingFlow";
 import { PreferenceForm } from "./components/PreferenceForm";
+import { ReelImport } from "./components/ReelImport";
 import { RealtimeAlert } from "./components/RealtimeAlert";
 import { SkeletonLoader } from "./components/SkeletonLoader";
+import { WaitlistBanner } from "./components/WaitlistBanner";
+import { useCurrencyRates, type CurrencyCode } from "./hooks/useCurrencyRates";
 import { useOfflineCache } from "./hooks/useOfflineCache";
 import { useRealtimeChannel } from "./hooks/useRealtimeChannel";
+import { useReelImport } from "./hooks/useReelImport";
 import { useTripPlanner } from "./hooks/useTripPlanner";
+import { track } from "./lib/analytics";
+import { strings, type LanguageCode } from "./i18n/strings";
 import type { PreferencesInput } from "./lib/schemas";
+import { supabase } from "./lib/supabase";
+import { useAuthStore } from "./store/useAuthStore";
 
 const ItineraryView = lazy(() => import("./components/ItineraryView"));
 
@@ -23,7 +36,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   /** Logs render failures for browser diagnostics. */
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("TripMind render error", error, info);
+    console.error("SAFAR render error", error, info);
   }
 
   /** Renders either the app or the fallback error panel. */
@@ -32,7 +45,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       return (
         <main className="app-shell error-shell" role="alert">
           <section className="panel visible">
-            <h1>TripMind</h1>
+            <h1>SAFAR</h1>
             <p>Something went wrong while rendering. Refresh the page and try again.</p>
           </section>
         </main>
@@ -42,14 +55,40 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-/** Renders the TripMind single-page app shell and wires alerts, cache, and planning. */
+/** Renders the SAFAR single-page app shell and wires alerts, cache, and planning. */
 export default function App() {
   const [tab, setTab] = useState("Plan");
+  const [activeScene, setActiveScene] = useState<SceneType>("mountains");
+  const [language, setLanguage] = useState<LanguageCode>("EN");
+  const [currency, setCurrency] = useState<CurrencyCode>("USD");
+  const [planningMode, setPlanningMode] = useState<"Manual" | "Reel">("Manual");
+  const [importedPreferences, setImportedPreferences] = useState<PreferencesInput | null>(null);
+  const [onboardingComplete, setOnboardingComplete] = useState(() => localStorage.getItem("safar:onboarding-complete") === "true");
+  const authUser = useAuthStore((state) => state.user);
+  const setAuthSession = useAuthStore((state) => state.setSession);
+  const setAuthLoading = useAuthStore((state) => state.setLoading);
   const planner = useTripPlanner();
+  const reelImport = useReelImport();
+  const rates = useCurrencyRates();
   const cache = useOfflineCache();
   const realtime = useRealtimeChannel(planner.tripId);
   const { cachedItinerary, isFromCache, save } = cache;
   const { itinerary, setItinerary } = planner;
+  const widgetKey = new URLSearchParams(window.location.search).get("widget_key");
+  const labels = strings[language];
+
+  useEffect(() => {
+    track("page_viewed", { page: "app" });
+    setAuthLoading(true);
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthSession(data.session, data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null);
+      setAuthLoading(false);
+    }).catch(() => setAuthLoading(false));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthSession(session, session?.user ? { id: session.user.id, email: session.user.email } : null);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [setAuthLoading, setAuthSession]);
 
   useEffect(() => {
     if (!itinerary && cachedItinerary) setItinerary(cachedItinerary);
@@ -65,47 +104,123 @@ export default function App() {
     setTab("Trips");
   }, [planner]);
 
+  useEffect(() => {
+    if (reelImport.preferences) setImportedPreferences(reelImport.preferences);
+  }, [reelImport.preferences]);
+
+  const completeOnboarding = useCallback(() => {
+    localStorage.setItem("safar:onboarding-complete", "true");
+    setOnboardingComplete(true);
+  }, []);
+
+  const planWidgetDestination = useCallback((destination: string) => {
+    const today = new Date();
+    const end = new Date(today);
+    end.setDate(today.getDate() + 2);
+    setImportedPreferences({
+      destination,
+      startDate: today.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+      budgetPreset: "comfort",
+      dietary: ["none"],
+      pace: "balanced",
+      interests: ["Culture", "Food"],
+      groupType: "friends",
+      transport: "mixed",
+      accessibilityNeeds: ""
+    });
+    setPlanningMode("Manual");
+    setTab("Plan");
+  }, []);
+
   return (
     <ErrorBoundary>
-    <div className="app-shell">
+    <div className="app-shell" dir={language === "AR" ? "rtl" : "ltr"}>
       <a href="#main" className="skip-link">Skip to planner</a>
-      <header className="topbar">
-        <div className="hero-copy">
-          <p>India travel planner</p>
-          <h1>TripMind</h1>
-          <span>Plan practical, train-first India trips from real constraints.</span>
-        </div>
-        <div className="hero-visual" aria-hidden="true">
-          <div className="india-orbit">
-            <svg className="india-map" viewBox="0 0 220 260" role="img">
-              <path d="M100 10c23 10 37 24 43 43l22 4 5 25-17 18 12 21-18 17 5 29-22 20-8 38-21 24-20-26 1-37-18-14 11-24-25-15 17-24-16-23 22-11-2-29 22-11 7-45Z" />
-              <path className="route-line" d="M90 58 C122 82 131 109 113 137 C96 163 103 190 128 215" />
-            </svg>
-            <span className="route-dot dot-north" />
-            <span className="route-dot dot-west" />
-            <span className="route-dot dot-south" />
-          </div>
-          <div className="floating-ticket ticket-one">
-            <strong>Delhi</strong>
-            <span>06:10 train</span>
-          </div>
-          <div className="floating-ticket ticket-two">
-            <strong>Jaipur</strong>
-            <span>Fort + food</span>
-          </div>
-          <div className="floating-ticket ticket-three">
-            <strong>Kochi</strong>
-            <span>Slow day</span>
-          </div>
-        </div>
-      </header>
+      <div className="site-header" dir={language === "AR" ? "rtl" : "ltr"}>
+        <strong>SAFAR</strong>
+        <GlobalControls
+          language={language}
+          currency={currency}
+          labels={{ language: labels.language, currency: labels.currency }}
+          onLanguageChange={setLanguage}
+          onCurrencyChange={setCurrency}
+        />
+      </div>
+      <DestinationHero
+        activeScene={activeScene}
+        labels={labels}
+        onSceneChange={setActiveScene}
+        onSearch={(destination) => {
+          const start = new Date();
+          const end = new Date(start);
+          end.setDate(start.getDate() + 4);
+          setImportedPreferences({
+            destination,
+            startDate: start.toISOString().slice(0, 10),
+            endDate: end.toISOString().slice(0, 10),
+            budgetPreset: "comfort",
+            dietary: ["none"],
+            pace: "balanced",
+            interests: ["Culture", "Food", "Photography"],
+            groupType: "couple",
+            transport: "mixed",
+            accessibilityNeeds: ""
+          });
+          setTab("Plan");
+        }}
+      />
 
       <main id="main" className="main-grid">
+        {!authUser ? <WaitlistBanner /> : null}
+        {authUser && !onboardingComplete ? (
+          <section className="panel visible onboarding-panel">
+            <OnboardingFlow onComplete={completeOnboarding} />
+          </section>
+        ) : null}
+        {widgetKey ? <CreatorWidget widgetKey={widgetKey} onPlanThisTrip={planWidgetDestination} /> : null}
+
         <section className={tab === "Plan" ? "panel visible" : "panel"}>
-          <PreferenceForm
-            loading={planner.loading}
-            onSubmit={submitPreferences}
-          />
+          {!authUser ? (
+            <AuthPanel />
+          ) : (
+            <>
+              <AuthPanel userEmail={authUser.email} />
+              <div className="mode-tabs" role="tablist" aria-label="Planner input mode">
+                {["Manual", "Reel"].map((mode) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={planningMode === mode}
+                    className={planningMode === mode ? "active" : ""}
+                    key={mode}
+                    onClick={() => setPlanningMode(mode as "Manual" | "Reel")}
+                  >
+                    {mode === "Manual" ? "Manual form" : "Import from Reel"}
+                  </button>
+                ))}
+              </div>
+              {planningMode === "Manual" ? (
+                <PreferenceForm
+                  loading={planner.loading}
+                  onSubmit={submitPreferences}
+                  initialValues={importedPreferences}
+                  currency={currency}
+                  rates={rates.data}
+                />
+              ) : (
+                <ReelImport
+                  loading={reelImport.loading}
+                  error={reelImport.error}
+                  preview={reelImport.data}
+                  preferences={reelImport.preferences}
+                  onExtract={reelImport.extractReel}
+                  onConfirm={submitPreferences}
+                  planning={planner.loading}
+                />
+              )}
+            </>
+          )}
           {planner.error ? <p className="error-text">{planner.error}</p> : null}
           {planner.requestId ? <p className="request-id">Request {planner.requestId}</p> : null}
         </section>
@@ -114,12 +229,12 @@ export default function App() {
           {planner.loading ? <SkeletonLoader /> : null}
           {planner.itinerary ? (
             <Suspense fallback={<SkeletonLoader />}>
-              <ItineraryView itinerary={planner.itinerary} isFromCache={isFromCache} />
+              <ItineraryView itinerary={planner.itinerary} isFromCache={isFromCache} currency={currency} rates={rates.data} />
             </Suspense>
           ) : (
             <div className="empty-state">
               <h2>Your itinerary will appear here</h2>
-              <p>Choose your preferences and TripMind will plan a train-first India route.</p>
+              <p>Choose your preferences and SAFAR will plan a global route across flights, trains, stays, food, and events.</p>
             </div>
           )}
         </section>
@@ -153,7 +268,7 @@ export default function App() {
       </nav>
 
       <footer>
-        <span>TripMind turns constraints into bookable India travel plans.</span>
+        <span>SAFAR turns constraints into bookable global travel plans.</span>
       </footer>
     </div>
     </ErrorBoundary>
